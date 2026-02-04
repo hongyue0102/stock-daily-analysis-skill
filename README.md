@@ -52,8 +52,8 @@ results = analyze_stocks(['600519', 'AAPL', '00700'])
 | 港股分析 | ✅ | 支持港股通标的 |
 | 美股分析 | ✅ | 基础行情获取 |
 | 技术面分析 | ✅ | MA/MACD/RSI/乖离率 |
-| AI 决策建议 | ✅ | DeepSeek/Gemini/OpenAI |
-| 市场数据源集成 | ✅ | 可选 market-data skill |
+| AI 决策建议 | ✅ | DeepSeek/Gemini |
+| 市场数据源集成 | ✅ | 可选 [market-data skill](https://github.com/chjm-ai/openclaw-market-data) |
 
 ## 🏗️ 项目结构
 
@@ -96,19 +96,7 @@ stock-daily-analysis/
   "ai": {
     "provider": "gemini",
     "api_key": "your-gemini-key",
-    "model": "gemini-1.5-flash"
-  }
-}
-```
-
-**OpenAI**
-```json
-{
-  "ai": {
-    "provider": "openai",
-    "api_key": "sk-your-openai-key",
-    "base_url": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini"
+    "model": "gemini-3-flash-preview"
   }
 }
 ```
@@ -136,7 +124,7 @@ stock-daily-analysis/
 
 ## 🤝 与 market-data skill 集成
 
-如果你的 OpenClaw 已安装 [market-data skill](https://clawhub.com/skills/market-data)，本项目可自动调用其数据源：
+如果你的 OpenClaw 已安装 [market-data skill](https://github.com/chjm-ai/openclaw-market-data)，本项目可自动调用其数据源：
 
 ```bash
 workspace/skills/
@@ -145,6 +133,24 @@ workspace/skills/
 ```
 
 配置 `use_market_data_skill: true` 后，ETF 数据将通过 market-data skill 获取，稳定性更好。
+
+### 安装 market-data skill
+
+```bash
+cd ~/workspace/skills/
+git clone https://github.com/chjm-ai/openclaw-market-data.git market-data
+```
+
+### 启用集成
+
+```json
+{
+  "data": {
+    "use_market_data_skill": true,
+    "market_data_skill_path": "../market-data"
+  }
+}
+```
 
 ## 📈 返回数据格式
 
