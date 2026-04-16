@@ -146,8 +146,14 @@ class TrendAnalysisResult:
             'signal_score': self.signal_score,
             'signal_reasons': self.signal_reasons,
             'risk_factors': self.risk_factors,
+            'macd_dif': self.macd_dif,
+            'macd_dea': self.macd_dea,
+            'macd_bar': self.macd_bar,
             'macd_status': self.macd_status.value,
             'macd_signal': self.macd_signal,
+            'rsi_6': self.rsi_6,
+            'rsi_12': self.rsi_12,
+            'rsi_24': self.rsi_24,
             'rsi_status': self.rsi_status.value,
             'rsi_signal': self.rsi_signal,
         }
@@ -170,12 +176,12 @@ class StockTrendAnalyzer:
     MA_SUPPORT_TOLERANCE = 0.02
     
     MACD_FAST = 12
-    MACD_SLOW = 26
+    MACD_SLOW = 20
     MACD_SIGNAL = 9
     
     RSI_SHORT = 6
     RSI_MID = 12
-    RSI_LONG = 24
+    RSI_LONG = 20
     RSI_OVERBOUGHT = 70
     RSI_OVERSOLD = 30
     
@@ -230,8 +236,8 @@ class StockTrendAnalyzer:
         df['MA5'] = df['close'].rolling(window=5, min_periods=1).mean()
         df['MA10'] = df['close'].rolling(window=10, min_periods=1).mean()
         df['MA20'] = df['close'].rolling(window=20, min_periods=1).mean()
-        if len(df) >= 60:
-            df['MA60'] = df['close'].rolling(window=60, min_periods=1).mean()
+        if len(df) >= 20:
+            df['MA60'] = df['close'].rolling(window=20, min_periods=1).mean()
         else:
             df['MA60'] = df['MA20']
         return df

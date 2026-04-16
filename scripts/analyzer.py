@@ -38,7 +38,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"加载配置文件失败: {e}，使用默认配置")
         return {
-            "data": {"days": 60, "realtime_enabled": True},
+            "data": {"days": 20, "realtime_enabled": True},
             "analysis": {"bias_threshold": 5.0}
         }
 
@@ -63,7 +63,7 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
     name = get_stock_name(code)
     
     # 获取历史数据
-    days = config.get('data', {}).get('days', 60)
+    days = config.get('data', {}).get('days', 20)
     df = get_daily_data(code, days=days)
     
     if df is None or df.empty:

@@ -33,7 +33,7 @@ class MarketDataFetcher:
         """检查 market-data skill 是否可用"""
         return self.script_path.exists()
     
-    def get_kline_data(self, code: str, count: int = 60, period: str = "day") -> Optional[pd.DataFrame]:
+    def get_kline_data(self, code: str, count: int = 20, period: str = "day") -> Optional[pd.DataFrame]:
         """
         获取 K 线数据
         

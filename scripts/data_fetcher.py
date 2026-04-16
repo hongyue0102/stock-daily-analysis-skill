@@ -1,20 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-数据获取模块 - 基于 akshare 的多市场数据获取
-支持 A股、港股、美股行情获取
+数据获取模块 - 基于 stock-market-information 本地 API
+
+替代 akshare 联网获取，使用本地 stock-market-information skill 的 API 接口获取 A 股行情数据。
+支持 A 股日行情、实时行情（日行情最新一条）、换手率、涨跌幅等数据获取。
 """
 
+import json
 import logging
-import re
-import time
+import os
+import subprocess
+import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 import pandas as pd
-import akshare as ak
 
 logger = logging.getLogger(__name__)
+
+# stock-market-information skill 路径（可通过环境变量 SKI_STOCK_MARKET_INFO_PATH 覆盖）
+_default_skill_dir = os.environ.get(
+    'SKI_STOCK_MARKET_INFO_PATH',
+    os.path.join(os.path.dirname(__file__), '..', '..', 'wh', 'stock-market-information')
+)
+SKILL_DIR = os.path.normpath(_default_skill_dir)
+API_QUERY_SCRIPT = os.path.join(SKILL_DIR, 'scripts', 'api_query.py')
 
 
 @dataclass
@@ -42,25 +53,92 @@ class StockQuote:
 @dataclass
 class ChipDistribution:
     """筹码分布数据"""
-    profit_ratio: float = 0.0  # 获利比例
-    avg_cost: float = 0.0  # 平均成本
-    concentration_90: float = 0.0  # 90%筹码集中度
-    concentration_70: float = 0.0  # 70%筹码集中度
+    profit_ratio: float = 0.0
+    avg_cost: float = 0.0
+    concentration_90: float = 0.0
+    concentration_70: float = 0.0
 
 
-def _is_us_code(stock_code: str) -> bool:
-    """判断是否为美股代码（1-5个大写字母）"""
-    code = stock_code.strip().upper()
-    return bool(re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', code))
+def _call_api(api_id: str, params: Dict[str, str]) -> Optional[Dict]:
+    """
+    调用 stock-market-information API（直接 HTTP 请求，避免子进程开销）
 
+    Args:
+        api_id: 接口标识
+        params: 请求参数字典
 
-def _is_hk_code(stock_code: str) -> bool:
-    """判断是否为港股代码（5位数字）"""
-    code = stock_code.lower()
-    if code.startswith('hk'):
-        numeric_part = code[2:]
-        return numeric_part.isdigit() and 1 <= len(numeric_part) <= 5
-    return code.isdigit() and len(code) == 5
+    Returns:
+        API 返回的 JSON 数据，失败返回 None
+    """
+    try:
+        import requests as req
+        import base64
+        import gzip
+
+        # 加载配置
+        env = {}
+        if os.path.exists(os.path.join(SKILL_DIR, 'scripts', '.env')):
+            with open(os.path.join(SKILL_DIR, 'scripts', '.env'), 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '=' in line and not line.strip().startswith('#'):
+                        k, v = line.strip().split('=', 1)
+                        env[k.strip()] = v.strip()
+
+        base_url = env.get('BASE_URL', '').rstrip('/')
+        user_key = os.environ.get('CXDA_USER_KEY') or env.get('CXDA_USER_KEY')
+
+        if not base_url or not user_key:
+            logger.error("未找到 BASE_URL 或 USER_KEY 配置")
+            return None
+
+        # 获取/刷新 token
+        token = None
+        token_expire_str = env.get('AUTH_TOKEN_EXPIRE', '')
+        if token_expire_str:
+            try:
+                from datetime import timedelta
+                expire = datetime.strptime(token_expire_str, '%Y-%m-%d %H:%M:%S')
+                if expire > datetime.now():
+                    token = env.get('AUTH_TOKEN')
+            except:
+                pass
+
+        if not token:
+            resp = req.get(
+                f"{base_url}/webservice/foreign_getAuthtoken.htm",
+                params={"userKey": user_key},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=30
+            )
+            token = json.loads(resp.text).get("result")
+            if not token:
+                logger.error("获取 authToken 失败")
+                return None
+
+        # 构建请求参数
+        request_params = {"authtoken": token}
+        request_params.update(params)
+
+        # 发送请求
+        resp = req.get(
+            f"{base_url}/webservice/cxdata/{api_id}.htm",
+            params=request_params,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=60
+        )
+
+        # 解码解压
+        data = json.loads(gzip.decompress(base64.b64decode(resp.text.strip())).decode('utf-8'))
+
+        if data.get('code') == '10000':
+            return data
+        else:
+            logger.error(f"API 返回错误: {data.get('msg', 'unknown')}")
+            return None
+
+    except Exception as e:
+        logger.error(f"API 调用异常: {e}")
+        return None
 
 
 def _is_etf_code(stock_code: str) -> bool:
@@ -72,283 +150,187 @@ def _is_etf_code(stock_code: str) -> bool:
 def normalize_code(stock_code: str) -> tuple:
     """
     标准化股票代码
-    
+
     Returns:
         tuple: (market, code)
         - market: 'a', 'hk', 'us'
         - code: 标准化后的代码
     """
     code = stock_code.strip()
-    
-    if _is_us_code(code):
+
+    if code.isdigit() and len(code) == 6:
+        return 'a', code
+
+    import re
+    if re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', code.upper()):
         return 'us', code.upper()
-    
-    if _is_hk_code(code):
-        # 去除 hk 前缀，返回5位数字
-        if code.lower().startswith('hk'):
-            code = code[2:]
+
+    if code.lower().startswith('hk'):
+        numeric_part = code[2:]
+        if numeric_part.isdigit():
+            return 'hk', numeric_part.zfill(5)
+
+    if code.isdigit() and len(code) == 5:
         return 'hk', code.zfill(5)
-    
-    # A股默认处理
+
     return 'a', code
 
 
-def get_daily_data(stock_code: str, days: int = 60) -> Optional[pd.DataFrame]:
+def get_daily_data(stock_code: str, days: int = 20) -> Optional[pd.DataFrame]:
     """
-    获取股票日线数据
-    
+    获取股票日线数据（通过 stock-market-information 本地 API）
+
     Args:
-        stock_code: 股票代码
-        days: 获取天数
-        
+        stock_code: 股票代码（仅支持 A 股）
+        days: 获取天数（API 返回全量数据，此参数用于截取）
+
     Returns:
         DataFrame 包含 OHLCV 数据，失败返回 None
     """
     market, code = normalize_code(stock_code)
-    
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days * 2)
-    
-    try:
-        if market == 'us':
-            return _fetch_us_data(code, start_date, end_date)
-        elif market == 'hk':
-            return _fetch_hk_data(code, start_date, end_date)
-        else:
-            return _fetch_a_stock_data(code, start_date, end_date)
-    except Exception as e:
-        logger.error(f"获取 {stock_code} 数据失败: {e}")
+
+    if market != 'a':
+        logger.warning(f"stock-market-information 仅支持 A 股，{stock_code} 为 {market} 市场代码")
         return None
 
+    # 多页请求拼接数据（API 每页返回 20 条）
+    pages_needed = max(1, (days + 19) // 20)
+    all_results = []
 
-def _fetch_a_stock_data(stock_code: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    """获取 A 股数据"""
-    start_str = start_date.strftime('%Y%m%d')
-    end_str = end_date.strftime('%Y%m%d')
-    
-    if _is_etf_code(stock_code):
-        df = ak.fund_etf_hist_em(
-            symbol=stock_code,
-            period="daily",
-            start_date=start_str,
-            end_date=end_str,
-            adjust="qfq"
-        )
-    else:
-        df = ak.stock_zh_a_hist(
-            symbol=stock_code,
-            period="daily",
-            start_date=start_str,
-            end_date=end_str,
-            adjust="qfq"
-        )
-    
-    return _standardize_columns(df)
+    for page in range(1, pages_needed + 1):
+        data = _call_api('getStkDayQuoByCond-G', {
+            'stkCode': code,
+            'pageNum': str(page),
+            'pageSize': '20',
+        })
+        if not data:
+            break
+        results = data.get('result', [])
+        if not results:
+            break
+        all_results.extend(results)
+        if len(results) < 20:
+            break
 
+    if not all_results:
+        logger.warning(f"{stock_code} 无日行情数据")
+        return None
 
-def _fetch_hk_data(stock_code: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    """获取港股数据"""
-    start_str = start_date.strftime('%Y%m%d')
-    end_str = end_date.strftime('%Y%m%d')
-    
-    df = ak.stock_hk_hist(
-        symbol=stock_code,
-        period="daily",
-        start_date=start_str,
-        end_date=end_str,
-        adjust="qfq"
-    )
-    
-    return _standardize_columns(df)
+    # 去重（按 TRADE_DATE）
+    seen = set()
+    unique = []
+    for r in all_results:
+        dt = r.get('TRADE_DATE', '')
+        if dt not in seen:
+            seen.add(dt)
+            unique.append(r)
 
+    # 转换为 DataFrame
+    df = pd.DataFrame(unique)
 
-def _fetch_us_data(stock_code: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-    """获取美股数据"""
-    df = ak.stock_us_daily(symbol=stock_code, adjust="qfq")
-    
-    if df is None or df.empty:
-        return pd.DataFrame()
-    
-    # 按日期过滤
-    df['date'] = pd.to_datetime(df['date'])
-    df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
-    
-    # 标准化列名
-    df = df.rename(columns={
-        'date': '日期',
-        'open': '开盘',
-        'high': '最高',
-        'low': '最低',
-        'close': '收盘',
-        'volume': '成交量'
-    })
-    
-    # 计算涨跌幅和成交额
-    if '收盘' in df.columns:
-        df['涨跌幅'] = df['收盘'].pct_change() * 100
-        df['涨跌幅'] = df['涨跌幅'].fillna(0)
-    
-    if '成交量' in df.columns and '收盘' in df.columns:
-        df['成交额'] = df['成交量'] * df['收盘']
-    
-    return _standardize_columns(df)
-
-
-def _standardize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """标准化 DataFrame 列名"""
-    if df is None or df.empty:
-        return pd.DataFrame()
-    
     column_mapping = {
-        '日期': 'date',
-        '开盘': 'open',
-        '收盘': 'close',
-        '最高': 'high',
-        '最低': 'low',
-        '成交量': 'volume',
-        '成交额': 'amount',
-        '涨跌幅': 'pct_chg',
+        'TRADE_DATE': 'date',
+        'OPEN_PRICE': 'open',
+        'CLOSE_PRICE': 'close',
+        'HIGH_PRICE': 'high',
+        'LOW_PRICE': 'low',
+        'TRADE_VOL': 'volume',
+        'TRADE_AMUT': 'amount',
+        'PRICE_LIMIT': 'pct_chg',
+        'PRE_CLOSE_PRICE': 'pre_close',
     }
-    
+
     df = df.rename(columns=column_mapping)
-    
-    # 确保日期格式正确
-    if 'date' in df.columns:
-        df['date'] = pd.to_datetime(df['date'])
-    
-    # 数值转换
-    for col in ['open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg']:
+
+    df['date'] = pd.to_datetime(df['date'])
+
+    for col in ['open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg', 'pre_close']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # 去除空值行
+
+    # 删除不需要的列
+    keep_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'pct_chg', 'pre_close']
+    df = df[[c for c in keep_cols if c in df.columns]]
+
     df = df.dropna(subset=['close', 'volume'])
-    
-    # 按日期排序
     df = df.sort_values('date', ascending=True).reset_index(drop=True)
-    
+
+    if days and len(df) > days:
+        df = df.tail(days).reset_index(drop=True)
+
     return df
 
 
 def get_realtime_quote(stock_code: str) -> Optional[StockQuote]:
     """
-    获取实时行情
-    
+    获取实时行情（通过日行情最新一条数据模拟）
+
     Args:
         stock_code: 股票代码
-        
+
     Returns:
         StockQuote 对象，失败返回 None
     """
     market, code = normalize_code(stock_code)
-    
-    try:
-        if market == 'us':
-            return None  # 美股暂不支持实时行情
-        elif market == 'hk':
-            return _get_hk_realtime_quote(code)
-        else:
-            return _get_a_stock_realtime_quote(code)
-    except Exception as e:
-        logger.warning(f"获取实时行情失败 {stock_code}: {e}")
+
+    if market != 'a':
+        logger.warning("stock-market-information 仅支持 A 股实时行情")
         return None
 
-
-def _get_a_stock_realtime_quote(stock_code: str) -> Optional[StockQuote]:
-    """获取 A 股实时行情"""
-    try:
-        df = ak.stock_zh_a_spot_em()
-        row = df[df['代码'] == stock_code]
-        
-        if row.empty:
-            return None
-        
-        row = row.iloc[0]
-        
-        return StockQuote(
-            code=stock_code,
-            name=str(row.get('名称', '')),
-            price=float(row.get('最新价', 0)) if pd.notna(row.get('最新价')) else 0,
-            change_pct=float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else 0,
-            change_amount=float(row.get('涨跌额', 0)) if pd.notna(row.get('涨跌额')) else 0,
-            volume=int(row.get('成交量', 0)) if pd.notna(row.get('成交量')) else 0,
-            amount=float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else 0,
-            open_price=float(row.get('今开', 0)) if pd.notna(row.get('今开')) else 0,
-            high=float(row.get('最高', 0)) if pd.notna(row.get('最高')) else 0,
-            low=float(row.get('最低', 0)) if pd.notna(row.get('最低')) else 0,
-            volume_ratio=float(row.get('量比', 0)) if pd.notna(row.get('量比')) else None,
-            turnover_rate=float(row.get('换手率', 0)) if pd.notna(row.get('换手率')) else None,
-            pe_ratio=float(row.get('市盈率-动态', 0)) if pd.notna(row.get('市盈率-动态')) else None,
-            pb_ratio=float(row.get('市净率', 0)) if pd.notna(row.get('市净率')) else None,
-            total_mv=float(row.get('总市值', 0)) if pd.notna(row.get('总市值')) else None,
-            circ_mv=float(row.get('流通市值', 0)) if pd.notna(row.get('流通市值')) else None,
-        )
-    except Exception as e:
-        logger.warning(f"获取 A 股实时行情失败: {e}")
+    # 获取日行情最新数据
+    data = _call_api('getStkDayQuoByCond-G', {'stkCode': code})
+    if not data:
         return None
 
-
-def _get_hk_realtime_quote(stock_code: str) -> Optional[StockQuote]:
-    """获取港股实时行情"""
-    try:
-        df = ak.stock_hk_spot_em()
-        row = df[df['代码'] == stock_code]
-        
-        if row.empty:
-            return None
-        
-        row = row.iloc[0]
-        
-        return StockQuote(
-            code=stock_code,
-            name=str(row.get('名称', '')),
-            price=float(row.get('最新价', 0)) if pd.notna(row.get('最新价')) else 0,
-            change_pct=float(row.get('涨跌幅', 0)) if pd.notna(row.get('涨跌幅')) else 0,
-            change_amount=float(row.get('涨跌额', 0)) if pd.notna(row.get('涨跌额')) else 0,
-            volume=int(row.get('成交量', 0)) if pd.notna(row.get('成交量')) else 0,
-            amount=float(row.get('成交额', 0)) if pd.notna(row.get('成交额')) else 0,
-            volume_ratio=float(row.get('量比', 0)) if pd.notna(row.get('量比')) else None,
-            turnover_rate=float(row.get('换手率', 0)) if pd.notna(row.get('换手率')) else None,
-            pe_ratio=float(row.get('市盈率', 0)) if pd.notna(row.get('市盈率')) else None,
-            pb_ratio=float(row.get('市净率', 0)) if pd.notna(row.get('市净率')) else None,
-        )
-    except Exception as e:
-        logger.warning(f"获取港股实时行情失败: {e}")
+    results = data.get('result', [])
+    if not results:
         return None
+
+    # 按日期排序取最新
+    results.sort(key=lambda x: x.get('TRADE_DATE', ''), reverse=True)
+    latest = results[0]
+
+    # 获取股票名称
+    name = latest.get('STK_SHORT_NAME', '')
+
+    # 获取换手率
+    turnover_rate = None
+    tr_data = _call_api('getDStkTurnoverRateByCond-G', {'stkCode': code})
+    if tr_data and tr_data.get('result'):
+        tr_results = tr_data['result']
+        tr_results.sort(key=lambda x: x.get('END_DATE', ''), reverse=True)
+        turnover_rate = float(tr_results[0].get('TURNOVER_RATE', 0))
+
+    close = float(latest.get('CLOSE_PRICE', 0))
+    pre_close = float(latest.get('PRE_CLOSE_PRICE', 0))
+    change_pct = float(latest.get('PRICE_LIMIT', 0))
+    change_amount = close - pre_close if pre_close > 0 else 0
+
+    return StockQuote(
+        code=code,
+        name=name,
+        price=close,
+        change_pct=change_pct,
+        change_amount=change_amount,
+        volume=int(latest.get('TRADE_VOL', 0)),
+        amount=float(latest.get('TRADE_AMUT', 0)),
+        open_price=float(latest.get('OPEN_PRICE', 0)),
+        high=float(latest.get('HIGH_PRICE', 0)),
+        low=float(latest.get('LOW_PRICE', 0)),
+        pre_close=pre_close,
+        turnover_rate=turnover_rate,
+    )
 
 
 def get_chip_distribution(stock_code: str) -> Optional[ChipDistribution]:
     """
-    获取筹码分布数据（仅 A 股）
-    
-    Args:
-        stock_code: 股票代码
-        
+    获取筹码分布数据（暂不支持，stock-market-information 无此接口）
+
     Returns:
-        ChipDistribution 对象，失败返回 None
+        None
     """
-    market, code = normalize_code(stock_code)
-    
-    if market != 'a' or _is_etf_code(code):
-        return None
-    
-    try:
-        df = ak.stock_cyq_em(symbol=code)
-        
-        if df is None or df.empty:
-            return None
-        
-        latest = df.iloc[-1]
-        
-        return ChipDistribution(
-            profit_ratio=float(latest.get('获利比例', 0)) if pd.notna(latest.get('获利比例')) else 0,
-            avg_cost=float(latest.get('平均成本', 0)) if pd.notna(latest.get('平均成本')) else 0,
-            concentration_90=float(latest.get('90%集中度', 0)) if pd.notna(latest.get('90%集中度')) else 0,
-            concentration_70=float(latest.get('70%集中度', 0)) if pd.notna(latest.get('70%集中度')) else 0,
-        )
-    except Exception as e:
-        logger.warning(f"获取筹码分布失败 {stock_code}: {e}")
-        return None
+    logger.warning("stock-market-information 不支持筹码分布数据")
+    return None
 
 
 def get_stock_name(stock_code: str) -> str:
@@ -356,6 +338,4 @@ def get_stock_name(stock_code: str) -> str:
     quote = get_realtime_quote(stock_code)
     if quote and quote.name:
         return quote.name
-    
-    # 默认返回代码
     return stock_code

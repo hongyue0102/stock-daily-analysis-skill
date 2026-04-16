@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AI 分析模块 - 调用 Gemini/OpenAI 进行深度分析
+AI 分析模块 - 调用 Gemini/OpenAI/Ollama 进行深度分析
 """
 
 import json
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AIAnalyzer:
-    """AI 分析器 - 支持 Gemini 和 OpenAI"""
+    """AI 分析器 - 支持 Gemini、OpenAI 和 Ollama 本地模型"""
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -27,9 +27,17 @@ class AIAnalyzer:
         self.temperature = config.get('temperature', 0.3)
         self.max_tokens = config.get('max_tokens', 4096)
         
-        if self.provider == 'openai' and HAS_OPENAI:
+        if self.provider in ('openai', 'mlx') and HAS_OPENAI:
+            # OpenAI 和 MLX 都使用相同的 API
             base_url = config.get('base_url', 'https://api.openai.com/v1')
-            self.client = OpenAI(api_key=self.api_key, base_url=base_url)
+            # 确保 api_key 不为空，否则用占位符
+            api_key = config.get('api_key', 'placeholder') if self.provider == 'mlx' else self.api_key
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+        elif self.provider == 'ollama' and HAS_OPENAI:
+            # Ollama 使用 OpenAI SDK 兼容模式
+            base_url = config.get('base_url', 'http://localhost:11434/v1')
+            # Ollama 需要设置一个假的 api_key
+            self.client = OpenAI(api_key='ollama', base_url=base_url)
         else:
             self.client = None
     
@@ -45,18 +53,34 @@ class AIAnalyzer:
         Returns:
             AI 分析结果
         """
-        if not self.api_key:
-            logger.warning("未配置 API Key，跳过 AI 分析")
-            return self._default_analysis()
-        
         try:
             if self.provider == 'gemini':
                 return self._analyze_with_gemini(code, name, technical_data)
+            elif self.provider in ('ollama', 'mlx'):
+                # Ollama 和 MLX 都使用 OpenAI SDK，可以共用同一个方法
+                return self._analyze_with_openai(code, name, technical_data)
             else:
                 return self._analyze_with_openai(code, name, technical_data)
         except Exception as e:
-            logger.error(f"AI 分析失败: {e}")
+            logger.error(f"AI 分析失败：{e}")
             return self._default_analysis()
+    
+    def _analyze_with_ollama(self, code: str, name: str, tech: Dict[str, Any]) -> Dict[str, Any]:
+        """使用 Ollama 本地模型"""
+        if not HAS_OPENAI or not self.client:
+            return self._default_analysis()
+        
+        prompt = self._build_prompt(code, name, tech)
+        
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens
+        )
+        
+        text = response.choices[0].message.content
+        return self._parse_ai_response(text, tech)
     
     def _analyze_with_gemini(self, code: str, name: str, tech: Dict[str, Any]) -> Dict[str, Any]:
         """使用 Gemini API"""
@@ -113,21 +137,21 @@ class AIAnalyzer:
         
         return f"""你是一位专业的股票分析师，请根据以下技术指标给出投资建议。
 
-股票: {name} ({code})
+股票：{name} ({code})
 
 技术指标数据:
-- 当前价格: {tech.get('current_price', 'N/A')}
-- MA5: {tech.get('ma5', 'N/A'):.2f} (乖离率: {tech.get('bias_ma5', 0):+.2f}%)
-- MA10: {tech.get('ma10', 'N/A'):.2f} (乖离率: {tech.get('bias_ma10', 0):+.2f}%)
+- 当前价格：{tech.get('current_price', 'N/A')}
+- MA5: {tech.get('ma5', 'N/A'):.2f} (乖离率：{tech.get('bias_ma5', 0):+.2f}%)
+- MA10: {tech.get('ma10', 'N/A'):.2f} (乖离率：{tech.get('bias_ma10', 0):+.2f}%)
 - MA20: {tech.get('ma20', 'N/A'):.2f}
-- 趋势状态: {tech.get('trend_status', 'N/A')}
+- 趋势状态：{tech.get('trend_status', 'N/A')}
 - MACD: {tech.get('macd_status', 'N/A')} - {tech.get('macd_signal', '')}
 - RSI: {tech.get('rsi_status', 'N/A')} - {tech.get('rsi_signal', '')}
-- 量能: {tech.get('volume_status', 'N/A')} - {tech.get('volume_trend', '')}
-- 技术面评分: {tech.get('signal_score', 0)}/100
-- 买入信号: {tech.get('buy_signal', 'N/A')}
-- 买入理由: {', '.join(tech.get('signal_reasons', []))}
-- 风险因素: {', '.join(tech.get('risk_factors', []))}
+- 量能：{tech.get('volume_status', 'N/A')} - {tech.get('volume_trend', '')}
+- 技术面评分：{tech.get('signal_score', 0)}/100
+- 买入信号：{tech.get('buy_signal', 'N/A')}
+- 买入理由：{', '.join(tech.get('signal_reasons', []))}
+- 风险因素：{', '.join(tech.get('risk_factors', []))}
 
 请输出以下 JSON 格式的分析结果:
 {{
@@ -164,7 +188,7 @@ class AIAnalyzer:
                     'stop_loss': result.get('stop_loss', '')
                 }
         except Exception as e:
-            logger.warning(f"解析 AI 响应失败: {e}")
+            logger.warning(f"解析 AI 响应失败：{e}")
         
         # 回退到基于技术面的默认分析
         return self._default_analysis_from_tech(tech)
