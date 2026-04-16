@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 导入模块
-from scripts.data_fetcher import get_daily_data, get_realtime_quote, get_stock_name
+from scripts.data_fetcher import get_daily_data
 from scripts.trend_analyzer import StockTrendAnalyzer
 from scripts.ai_analyzer import AIAnalyzer
 from scripts.notifier import AnalysisReport, format_analysis_report, format_dashboard_report
@@ -58,15 +58,24 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
         config = load_config()
     
     logger.info(f"开始分析股票: {code}")
-    
-    # 获取股票名称
-    name = get_stock_name(code)
-    
-    # 获取历史数据
+
+    # 获取历史数据和股票名称（仅使用日行情接口）
     days = config.get('data', {}).get('days', 20)
-    df = get_daily_data(code, days=days)
-    
-    if df is None or df.empty:
+    result = get_daily_data(code, days=days)
+
+    if result is None:
+        logger.error(f"无法获取 {code} 的数据")
+        return {
+            'code': code,
+            'name': code,
+            'error': '数据获取失败',
+            'technical_indicators': {},
+            'ai_analysis': {'operation_advice': '数据不足', 'sentiment_score': 0}
+        }
+
+    df, name = result
+
+    if df.empty:
         logger.error(f"无法获取 {code} 的数据")
         return {
             'code': code,
@@ -75,15 +84,10 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
             'technical_indicators': {},
             'ai_analysis': {'operation_advice': '数据不足', 'sentiment_score': 0}
         }
-    
+
     # 技术分析
     analyzer = StockTrendAnalyzer()
     trend_result = analyzer.analyze(df, code)
-    
-    # 获取实时行情
-    quote = get_realtime_quote(code)
-    if quote:
-        name = quote.name or name
     
     # AI 深度分析
     ai_config = config.get('ai', {})

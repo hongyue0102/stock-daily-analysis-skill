@@ -3,17 +3,14 @@
 数据获取模块 - 基于 stock-market-information 本地 API
 
 替代 akshare 联网获取，使用本地 stock-market-information skill 的 API 接口获取 A 股行情数据。
-支持 A 股日行情、实时行情（日行情最新一条）、换手率、涨跌幅等数据获取。
+仅使用 getStkDayQuoByCond-G（日行情）接口获取所有需要的数据。
 """
 
 import json
 import logging
 import os
-import subprocess
-import sys
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Tuple
 
 import pandas as pd
 
@@ -25,38 +22,6 @@ _default_skill_dir = os.environ.get(
     os.path.join(os.path.dirname(__file__), '..', '..', 'wh', 'stock-market-information')
 )
 SKILL_DIR = os.path.normpath(_default_skill_dir)
-API_QUERY_SCRIPT = os.path.join(SKILL_DIR, 'scripts', 'api_query.py')
-
-
-@dataclass
-class StockQuote:
-    """统一实时行情数据结构"""
-    code: str
-    name: str = ""
-    price: float = 0.0
-    change_pct: float = 0.0
-    change_amount: float = 0.0
-    volume: int = 0
-    amount: float = 0.0
-    open_price: float = 0.0
-    high: float = 0.0
-    low: float = 0.0
-    pre_close: float = 0.0
-    volume_ratio: Optional[float] = None
-    turnover_rate: Optional[float] = None
-    pe_ratio: Optional[float] = None
-    pb_ratio: Optional[float] = None
-    total_mv: Optional[float] = None
-    circ_mv: Optional[float] = None
-
-
-@dataclass
-class ChipDistribution:
-    """筹码分布数据"""
-    profit_ratio: float = 0.0
-    avg_cost: float = 0.0
-    concentration_90: float = 0.0
-    concentration_70: float = 0.0
 
 
 def _call_api(api_id: str, params: Dict[str, str]) -> Optional[Dict]:
@@ -176,7 +141,7 @@ def normalize_code(stock_code: str) -> tuple:
     return 'a', code
 
 
-def get_daily_data(stock_code: str, days: int = 20) -> Optional[pd.DataFrame]:
+def get_daily_data(stock_code: str, days: int = 20) -> Optional[Tuple[pd.DataFrame, str]]:
     """
     获取股票日线数据（通过 stock-market-information 本地 API）
 
@@ -185,7 +150,7 @@ def get_daily_data(stock_code: str, days: int = 20) -> Optional[pd.DataFrame]:
         days: 获取天数（API 返回全量数据，此参数用于截取）
 
     Returns:
-        DataFrame 包含 OHLCV 数据，失败返回 None
+        (DataFrame, 股票名称) 元组，DataFrame 包含 OHLCV 数据，失败返回 None
     """
     market, code = normalize_code(stock_code)
 
@@ -215,6 +180,10 @@ def get_daily_data(stock_code: str, days: int = 20) -> Optional[pd.DataFrame]:
     if not all_results:
         logger.warning(f"{stock_code} 无日行情数据")
         return None
+
+    # 提取股票名称（取最新一条数据中的名称）
+    all_results.sort(key=lambda x: x.get('TRADE_DATE', ''), reverse=True)
+    name = all_results[0].get('STK_SHORT_NAME', stock_code)
 
     # 去重（按 TRADE_DATE）
     seen = set()
@@ -258,84 +227,4 @@ def get_daily_data(stock_code: str, days: int = 20) -> Optional[pd.DataFrame]:
     if days and len(df) > days:
         df = df.tail(days).reset_index(drop=True)
 
-    return df
-
-
-def get_realtime_quote(stock_code: str) -> Optional[StockQuote]:
-    """
-    获取实时行情（通过日行情最新一条数据模拟）
-
-    Args:
-        stock_code: 股票代码
-
-    Returns:
-        StockQuote 对象，失败返回 None
-    """
-    market, code = normalize_code(stock_code)
-
-    if market != 'a':
-        logger.warning("stock-market-information 仅支持 A 股实时行情")
-        return None
-
-    # 获取日行情最新数据
-    data = _call_api('getStkDayQuoByCond-G', {'stkCode': code})
-    if not data:
-        return None
-
-    results = data.get('result', [])
-    if not results:
-        return None
-
-    # 按日期排序取最新
-    results.sort(key=lambda x: x.get('TRADE_DATE', ''), reverse=True)
-    latest = results[0]
-
-    # 获取股票名称
-    name = latest.get('STK_SHORT_NAME', '')
-
-    # 获取换手率
-    turnover_rate = None
-    tr_data = _call_api('getDStkTurnoverRateByCond-G', {'stkCode': code})
-    if tr_data and tr_data.get('result'):
-        tr_results = tr_data['result']
-        tr_results.sort(key=lambda x: x.get('END_DATE', ''), reverse=True)
-        turnover_rate = float(tr_results[0].get('TURNOVER_RATE', 0))
-
-    close = float(latest.get('CLOSE_PRICE', 0))
-    pre_close = float(latest.get('PRE_CLOSE_PRICE', 0))
-    change_pct = float(latest.get('PRICE_LIMIT', 0))
-    change_amount = close - pre_close if pre_close > 0 else 0
-
-    return StockQuote(
-        code=code,
-        name=name,
-        price=close,
-        change_pct=change_pct,
-        change_amount=change_amount,
-        volume=int(latest.get('TRADE_VOL', 0)),
-        amount=float(latest.get('TRADE_AMUT', 0)),
-        open_price=float(latest.get('OPEN_PRICE', 0)),
-        high=float(latest.get('HIGH_PRICE', 0)),
-        low=float(latest.get('LOW_PRICE', 0)),
-        pre_close=pre_close,
-        turnover_rate=turnover_rate,
-    )
-
-
-def get_chip_distribution(stock_code: str) -> Optional[ChipDistribution]:
-    """
-    获取筹码分布数据（暂不支持，stock-market-information 无此接口）
-
-    Returns:
-        None
-    """
-    logger.warning("stock-market-information 不支持筹码分布数据")
-    return None
-
-
-def get_stock_name(stock_code: str) -> str:
-    """获取股票名称"""
-    quote = get_realtime_quote(stock_code)
-    if quote and quote.name:
-        return quote.name
-    return stock_code
+    return df, name
