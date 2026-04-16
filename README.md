@@ -4,7 +4,7 @@
 
 ## 🎯 项目定位
 
-本项目是 [ZhuLinsen/daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis) 的 **OpenClaw Skill 适配版**。
+本项目是 [ZhuLinsen/daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis) 的 **OpenClaw Skill 适配版**，fork 自 [chjm-ai/stock-daily-analysis-skill](https://github.com/chjm-ai/stock-daily-analysis-skill) 并进行了增强。
 
 与原版相比，本项目的特点：
 - ✅ **OpenClaw 原生集成** - 直接作为 Skill 调用
@@ -12,16 +12,58 @@
 - ✅ **简化依赖** - 核心功能零配置即可运行
 - ✅ **开源友好** - MIT 协议，欢迎贡献
 
+## 📢 本 Fork 的改进
+
+相比原项目 [chjm-ai/stock-daily-analysis-skill](https://github.com/chjm-ai/stock-daily-analysis-skill)，主要做了以下改进：
+
+### 1. 数据获取周期优化（60天 → 20天）
+
+将技术指标的计算周期从 60 个交易日缩短为 20 个交易日，更高效、更聚焦近期行情：
+
+| 参数 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| MACD 慢线周期 | 26 | 20 | 适配短周期数据 |
+| RSI 长周期 | 24 | 20 | 适配短周期数据 |
+| MA60 均线窗口 | rolling(60) | rolling(20) | 适配短周期数据 |
+| 默认获取天数 | 60 | 20 | 减少数据请求量，提升效率 |
+
+### 2. 数据源切换：财新数据平台
+
+原项目使用 `akshare` 获取行情数据，本项目改用 [财新数据平台](https://yun.ccxe.com.cn/) 的 **stock-market-information skill** 作为数据源：
+
+- 通过财新数据 API 获取 A 股日行情、实时行情、换手率等数据
+- 数据更稳定，接口响应更快
+- 支持通过环境变量 `SKI_STOCK_MARKET_INFO_PATH` 自定义数据源 skill 路径
+
 ## 🚀 快速开始
 
 ### 安装
 
 ```bash
 cd ~/workspace/skills/
-git clone https://github.com/yourusername/stock-daily-analysis.git
+git clone https://github.com/hongyue0102/stock-daily-analysis-skill.git
 
 # 安装依赖
-pip3 install akshare pandas numpy requests
+pip3 install pandas numpy requests openai python-dotenv
+```
+
+### 数据源安装
+
+本项目依赖 [财新数据平台的 stock-market-information skill](https://yun.ccxe.com.cn/) 获取行情数据：
+
+```bash
+cd ~/workspace/skills/
+mkdir -p wh
+cd wh
+# 将 stock-market-information skill 放置在此目录
+```
+
+目录结构应为：
+```
+workspace/skills/
+├── wh/
+│   └── stock-market-information/   # 财新数据源 skill
+└── stock-daily-analysis-skill/     # 本项目
 ```
 
 ### 配置
@@ -58,7 +100,7 @@ results = analyze_stocks(['600519', 'AAPL', '00700'])
 ## 🏗️ 项目结构
 
 ```
-stock-daily-analysis/
+stock-daily-analysis-skill/
 ├── SKILL.md                 # OpenClaw Skill 定义
 ├── README.md                # 项目文档
 ├── LICENSE                  # MIT 许可证
@@ -67,7 +109,7 @@ stock-daily-analysis/
 ├── requirements.txt         # Python 依赖
 └── scripts/
     ├── analyzer.py          # 主入口
-    ├── data_fetcher.py      # akshare 数据获取
+    ├── data_fetcher.py      # 财新数据源获取（stock-market-information skill）
     ├── market_data_bridge.py # market-data skill 桥接
     ├── trend_analyzer.py    # 技术分析引擎
     ├── ai_analyzer.py       # AI 分析模块
@@ -103,54 +145,33 @@ stock-daily-analysis/
 
 ### 数据源配置
 
-**方案1：使用 akshare (默认)**
-```json
-{
-  "data": {
-    "use_market_data_skill": false
-  }
-}
-```
-
-**方案2：使用 market-data skill (推荐用于 ETF)**
+**使用财新数据平台 stock-market-information skill（默认）**
 ```json
 {
   "data": {
     "use_market_data_skill": true,
-    "market_data_skill_path": "../market-data"
+    "market_data_skill_path": "../wh/stock-market-information"
   }
 }
 ```
 
-## 🤝 与 market-data skill 集成
+也可通过环境变量自定义数据源路径：
+```bash
+export SKI_STOCK_MARKET_INFO_PATH=/path/to/stock-market-information
+```
 
-如果你的 OpenClaw 已安装 [market-data skill](https://github.com/chjm-ai/openclaw-market-data)，本项目可自动调用其数据源：
+## 🤝 与 stock-market-information skill 集成
+
+本项目默认使用 [财新数据平台](https://yun.ccxe.com.cn/) 的 stock-market-information skill 获取 A 股行情数据：
 
 ```bash
 workspace/skills/
-├── market-data/          # 已安装
-└── stock-daily-analysis/ # 本项目
+├── wh/
+│   └── stock-market-information/   # 财新数据源
+└── stock-daily-analysis-skill/     # 本项目
 ```
 
-配置 `use_market_data_skill: true` 后，ETF 数据将通过 market-data skill 获取，稳定性更好。
-
-### 安装 market-data skill
-
-```bash
-cd ~/workspace/skills/
-git clone https://github.com/chjm-ai/openclaw-market-data.git market-data
-```
-
-### 启用集成
-
-```json
-{
-  "data": {
-    "use_market_data_skill": true,
-    "market_data_skill_path": "../market-data"
-  }
-}
-```
+配置 `use_market_data_skill: true` 后，行情数据将通过财新数据 API 获取。
 
 ## 📈 返回数据格式
 
@@ -211,8 +232,9 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 🙏 致谢
 
-- 数据来源：[akshare](https://github.com/akfamily/akshare)
+- 原项目：[chjm-ai/stock-daily-analysis-skill](https://github.com/chjm-ai/stock-daily-analysis-skill)
 - 灵感来源：[ZhuLinsen/daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis)
+- 数据来源：[财新数据平台](https://yun.ccxe.com.cn/)
 - 平台支持：[OpenClaw](https://openclaw.ai)
 
 ---
