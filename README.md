@@ -31,9 +31,15 @@
 
 原项目使用 `akshare` 获取行情数据，本项目改用 [财新数据平台](https://yun.ccxe.com.cn/) 的 **stock-market-information skill** 作为数据源：
 
-- 通过财新数据 API 获取 A 股日行情、实时行情、换手率等数据
+- 通过财新数据 API 获取 A 股日行情数据（仅使用 getStkDayQuoByCond-G 接口）
 - 数据更稳定，接口响应更快
 - 支持通过环境变量 `SKI_STOCK_MARKET_INFO_PATH` 自定义数据源 skill 路径
+
+### 3. 精简数据源，移除冗余代码
+
+- 仅使用 `getStkDayQuoByCond-G`（日行情）接口获取所有需要的数据，不再调用换手率、市值等接口
+- 删除未使用的 `market_data_bridge.py`、`StockQuote`、`ChipDistribution` 等死代码
+- 股票名称从日行情数据中直接提取，不再单独请求
 
 ## 🚀 快速开始
 
@@ -95,7 +101,7 @@ results = analyze_stocks(['600519', 'AAPL', '00700'])
 | 美股分析 | ✅ | 基础行情获取 |
 | 技术面分析 | ✅ | MA/MACD/RSI/乖离率 |
 | AI 决策建议 | ✅ | DeepSeek/Gemini |
-| 市场数据源集成 | ✅ | 可选 [market-data skill](https://github.com/chjm-ai/openclaw-market-data) |
+| 市场数据源集成 | ✅ | [stock-market-information skill](https://yun.ccxe.com.cn/) |
 
 ## 🏗️ 项目结构
 
@@ -110,7 +116,6 @@ stock-daily-analysis-skill/
 └── scripts/
     ├── analyzer.py          # 主入口
     ├── data_fetcher.py      # 财新数据源获取（stock-market-information skill）
-    ├── market_data_bridge.py # market-data skill 桥接
     ├── trend_analyzer.py    # 技术分析引擎
     ├── ai_analyzer.py       # AI 分析模块
     └── notifier.py          # 报告输出
@@ -145,33 +150,16 @@ stock-daily-analysis-skill/
 
 ### 数据源配置
 
-**使用财新数据平台 stock-market-information skill（默认）**
-```json
-{
-  "data": {
-    "use_market_data_skill": true,
-    "market_data_skill_path": "../wh/stock-market-information"
-  }
-}
-```
-
-也可通过环境变量自定义数据源路径：
+通过环境变量自定义数据源 skill 路径：
 ```bash
 export SKI_STOCK_MARKET_INFO_PATH=/path/to/stock-market-information
 ```
 
+默认路径为 `../../wh/stock-market-information`。
+
 ## 🤝 与 stock-market-information skill 集成
 
-本项目默认使用 [财新数据平台](https://yun.ccxe.com.cn/) 的 stock-market-information skill 获取 A 股行情数据：
-
-```bash
-workspace/skills/
-├── wh/
-│   └── stock-market-information/   # 财新数据源
-└── stock-daily-analysis-skill/     # 本项目
-```
-
-配置 `use_market_data_skill: true` 后，行情数据将通过财新数据 API 获取。
+本项目使用 [财新数据平台](https://yun.ccxe.com.cn/) 的 stock-market-information skill 获取 A 股行情数据，仅调用 `getStkDayQuoByCond-G`（日行情）接口。
 
 ## 📈 返回数据格式
 
