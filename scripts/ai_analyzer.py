@@ -133,17 +133,52 @@ class AIAnalyzer:
         return self._parse_ai_response(text, tech)
     
     def _build_prompt(self, code: str, name: str, tech: Dict[str, Any]) -> str:
-        """构建 AI 提示词"""
-        
+        """构建 AI 提示词（优先从外部 markdown 模板加载）"""
+        from pathlib import Path
+
+        template_path = Path(__file__).parent / "prompts" / "analysis_prompt.md"
+
+        # 构建变量映射
+        variables = {
+            'code': code,
+            'name': name,
+            'current_price': tech.get('current_price', 'N/A'),
+            'ma5': f"{tech.get('ma5', 0):.2f}",
+            'bias_ma5': f"{tech.get('bias_ma5', 0):+.2f}%",
+            'ma10': f"{tech.get('ma10', 0):.2f}",
+            'bias_ma10': f"{tech.get('bias_ma10', 0):+.2f}%",
+            'ma20': f"{tech.get('ma20', 0):.2f}",
+            'trend_status': tech.get('trend_status', 'N/A'),
+            'macd_status': tech.get('macd_status', 'N/A'),
+            'macd_signal': tech.get('macd_signal', ''),
+            'rsi_status': tech.get('rsi_status', 'N/A'),
+            'rsi_signal': tech.get('rsi_signal', ''),
+            'volume_status': tech.get('volume_status', 'N/A'),
+            'volume_trend': tech.get('volume_trend', ''),
+            'signal_score': tech.get('signal_score', 0),
+            'buy_signal': tech.get('buy_signal', 'N/A'),
+            'signal_reasons': ', '.join(tech.get('signal_reasons', [])),
+            'risk_factors': ', '.join(tech.get('risk_factors', [])),
+        }
+
+        try:
+            template = template_path.read_text(encoding='utf-8')
+            for key, value in variables.items():
+                template = template.replace('{{' + key + '}}', str(value))
+            return template
+        except FileNotFoundError:
+            logger.warning("模板文件 %s 不存在，使用内联 prompt", template_path)
+
+        # 回退：内联 prompt（兼容无模板文件的情况）
         return f"""你是一位专业的股票分析师，请根据以下技术指标给出投资建议。
 
 股票：{name} ({code})
 
 技术指标数据:
 - 当前价格：{tech.get('current_price', 'N/A')}
-- MA5: {tech.get('ma5', 'N/A'):.2f} (乖离率：{tech.get('bias_ma5', 0):+.2f}%)
-- MA10: {tech.get('ma10', 'N/A'):.2f} (乖离率：{tech.get('bias_ma10', 0):+.2f}%)
-- MA20: {tech.get('ma20', 'N/A'):.2f}
+- MA5: {tech.get('ma5', 0):.2f} (乖离率：{tech.get('bias_ma5', 0):+.2f}%)
+- MA10: {tech.get('ma10', 0):.2f} (乖离率：{tech.get('bias_ma10', 0):+.2f}%)
+- MA20: {tech.get('ma20', 0):.2f}
 - 趋势状态：{tech.get('trend_status', 'N/A')}
 - MACD: {tech.get('macd_status', 'N/A')} - {tech.get('macd_signal', '')}
 - RSI: {tech.get('rsi_status', 'N/A')} - {tech.get('rsi_signal', '')}

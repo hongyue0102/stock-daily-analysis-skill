@@ -41,6 +41,14 @@
 - 删除未使用的 `market_data_bridge.py`、`StockQuote`、`ChipDistribution` 等死代码
 - 股票名称从日行情数据中直接提取，不再单独请求
 
+### 4. Prompt 模板外置
+
+将 AI 分析的提示词从 Python 代码中抽离为独立的 Markdown 模板文件：
+
+- 提示词模板位于 `scripts/prompts/analysis_prompt.md`，使用 `{{变量名}}` 占位符
+- 无需修改 Python 代码即可调整 AI 分析的提示词、输出格式和分析维度
+- 模板文件不存在时自动回退到内联 prompt，兼容无模板环境
+
 ## 🚀 快速开始
 
 ### 安装
@@ -118,7 +126,9 @@ stock-daily-analysis-skill/
     ├── data_fetcher.py      # 财新数据源获取（stock-market-information skill）
     ├── trend_analyzer.py    # 技术分析引擎
     ├── ai_analyzer.py       # AI 分析模块
-    └── notifier.py          # 报告输出
+    ├── notifier.py          # 报告输出
+    └── prompts/
+        └── analysis_prompt.md  # AI 分析提示词模板
 ```
 
 ## 🔧 配置说明
