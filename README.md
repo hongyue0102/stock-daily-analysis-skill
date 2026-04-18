@@ -49,6 +49,25 @@
 - 无需修改 Python 代码即可调整 AI 分析的提示词、输出格式和分析维度
 - 模板文件不存在时自动回退到内联 prompt，兼容无模板环境
 
+### 5. AI 分析模块重构：统一 OpenAI 兼容接口
+
+原项目硬编码了 Gemini、OpenAI、Ollama、MLX 四个 provider 分支，每个分支有独立的初始化和调用逻辑。本次重构统一为通用的 OpenAI 兼容接口：
+
+- **删除 `provider` 字段**，不再区分 Gemini/Ollama/OpenAI/MLX
+- 只需配置 `api_key` + `base_url` + `model` 即可接入任意 LLM
+- 删除 `_analyze_with_gemini()`、`_analyze_with_ollama()`、`_analyze_with_openai()` 三个独立方法
+- 未配置 AI 时自动降级为纯技术面分析，不会报错
+- 与 `memory-lancedb-pro` 等 skill 保持一致的配置风格
+
+### 6. 新增 `generate_report()` 完整报告生成
+
+新增一键生成完整 Markdown 分析报告的函数，解决之前报告格式不统一、可能遗漏行情数据的问题：
+
+- **行情数据是必须的** — 获取失败直接返回错误，不会生成残缺报告
+- 调用方只需 `generate_report('600519')` 一行即可获得完整报告
+- 报告包含：核心结论、最新行情、技术指标、支撑压力位、近 N 日行情走势表、AI 决策建议
+- 无需调用方自行拼装报告
+
 ## 🚀 快速开始
 
 ### 安装
@@ -90,9 +109,13 @@ cp config.example.json config.json
 ### 使用
 
 ```python
-from scripts.analyzer import analyze_stock, analyze_stocks
+from scripts.analyzer import analyze_stock, analyze_stocks, generate_report
 
-# 分析单只股票
+# 生成完整的 Markdown 分析报告（推荐）
+report = generate_report('600519')
+print(report)
+
+# 分析单只股票（返回结构化数据）
 result = analyze_stock('600519')
 print(result['ai_analysis']['operation_advice'])  # 买入/持有/观望
 
@@ -108,7 +131,7 @@ results = analyze_stocks(['600519', 'AAPL', '00700'])
 | 港股分析 | ✅ | 支持港股通标的 |
 | 美股分析 | ✅ | 基础行情获取 |
 | 技术面分析 | ✅ | MA/MACD/RSI/乖离率 |
-| AI 决策建议 | ✅ | DeepSeek/Gemini |
+| AI 决策建议 | ✅ | OpenAI 兼容接口（任意 LLM） |
 | 市场数据源集成 | ✅ | [stock-market-information skill](https://yun.ccxe.com.cn/) |
 
 ## 🏗️ 项目结构
@@ -135,28 +158,29 @@ stock-daily-analysis-skill/
 
 ### AI 模型配置
 
-**DeepSeek (推荐，国内可用)**
+通过 OpenAI 兼容接口接入任意 LLM，只需配置 `api_key`、`base_url`、`model` 三个字段：
+
 ```json
 {
   "ai": {
-    "provider": "openai",
-    "api_key": "sk-your-deepseek-key",
+    "api_key": "sk-your-api-key",
     "base_url": "https://api.deepseek.com/v1",
-    "model": "deepseek-chat"
+    "model": "deepseek-chat",
+    "temperature": 0.3,
+    "max_tokens": 4096
   }
 }
 ```
 
-**Gemini (免费，需代理)**
-```json
-{
-  "ai": {
-    "provider": "gemini",
-    "api_key": "your-gemini-key",
-    "model": "gemini-3-flash-preview"
-  }
-}
-```
+**支持的 base_url 示例：**
+
+| 提供商 | base_url | 说明 |
+|--------|----------|------|
+| DeepSeek | `https://api.deepseek.com/v1` | 推荐，国内可用 |
+| OpenAI | `https://api.openai.com/v1` | 需代理 |
+| 智谱 | `https://open.bigmodel.cn/api/paas/v4` | 国内可用 |
+| Ollama 本地 | `http://localhost:11434/v1` | 免费本地部署 |
+| 其他 | 对应的 OpenAI 兼容接口 | 只要兼容 OpenAI API 即可 |
 
 ### 数据源配置
 

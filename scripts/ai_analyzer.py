@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-AI 分析模块 - 调用 Gemini/OpenAI/Ollama 进行深度分析
+AI 分析模块 - 通过 OpenAI 兼容接口调用 LLM 进行深度分析
 """
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 try:
     from openai import OpenAI
@@ -17,128 +17,63 @@ logger = logging.getLogger(__name__)
 
 
 class AIAnalyzer:
-    """AI 分析器 - 支持 Gemini、OpenAI 和 Ollama 本地模型"""
-    
+    """AI 分析器 - 通过 OpenAI 兼容接口调用任意 LLM"""
+
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
-        self.provider = config.get('provider', 'gemini')
-        self.api_key = config.get('api_key', '')
-        self.model = config.get('model', 'gemini-3-flash-preview')
+        self.model = config.get('model', 'gpt-4o-mini')
         self.temperature = config.get('temperature', 0.3)
         self.max_tokens = config.get('max_tokens', 4096)
-        
-        if self.provider in ('openai', 'mlx') and HAS_OPENAI:
-            # OpenAI 和 MLX 都使用相同的 API
-            base_url = config.get('base_url', 'https://api.openai.com/v1')
-            # 确保 api_key 不为空，否则用占位符
-            api_key = config.get('api_key', 'placeholder') if self.provider == 'mlx' else self.api_key
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-        elif self.provider == 'ollama' and HAS_OPENAI:
-            # Ollama 使用 OpenAI SDK 兼容模式
-            base_url = config.get('base_url', 'http://localhost:11434/v1')
-            # Ollama 需要设置一个假的 api_key
-            self.client = OpenAI(api_key='ollama', base_url=base_url)
+        self.enabled = bool(config.get('api_key') or config.get('base_url'))
+
+        if self.enabled and HAS_OPENAI:
+            kwargs = {}
+            if config.get('api_key'):
+                kwargs['api_key'] = config['api_key']
+            if config.get('base_url'):
+                kwargs['base_url'] = config['base_url']
+            self.client = OpenAI(**kwargs)
         else:
             self.client = None
-    
+            if not HAS_OPENAI:
+                logger.warning("openai 包未安装，AI 分析不可用")
+            elif not self.enabled:
+                logger.info("AI 分析未配置（缺少 api_key 或 base_url），将使用技术面兜底分析")
+
     def analyze(self, code: str, name: str, technical_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         使用 AI 进行深度分析
-        
+
         Args:
             code: 股票代码
             name: 股票名称
             technical_data: 技术指标数据
-            
+
         Returns:
             AI 分析结果
         """
+        if not self.client:
+            return self._default_analysis_from_tech(technical_data)
+
         try:
-            if self.provider == 'gemini':
-                return self._analyze_with_gemini(code, name, technical_data)
-            elif self.provider in ('ollama', 'mlx'):
-                # Ollama 和 MLX 都使用 OpenAI SDK，可以共用同一个方法
-                return self._analyze_with_openai(code, name, technical_data)
-            else:
-                return self._analyze_with_openai(code, name, technical_data)
+            prompt = self._build_prompt(code, name, technical_data)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
+            )
+            text = response.choices[0].message.content
+            return self._parse_ai_response(text, technical_data)
         except Exception as e:
             logger.error(f"AI 分析失败：{e}")
-            return self._default_analysis()
-    
-    def _analyze_with_ollama(self, code: str, name: str, tech: Dict[str, Any]) -> Dict[str, Any]:
-        """使用 Ollama 本地模型"""
-        if not HAS_OPENAI or not self.client:
-            return self._default_analysis()
-        
-        prompt = self._build_prompt(code, name, tech)
-        
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        
-        text = response.choices[0].message.content
-        return self._parse_ai_response(text, tech)
-    
-    def _analyze_with_gemini(self, code: str, name: str, tech: Dict[str, Any]) -> Dict[str, Any]:
-        """使用 Gemini API"""
-        import requests
-        import os
-        
-        prompt = self._build_prompt(code, name, tech)
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
-        headers = {"Content-Type": "application/json"}
-        params = {"key": self.api_key}
-        
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": self.temperature,
-                "maxOutputTokens": self.max_tokens
-            }
-        }
-        
-        # 代理设置
-        proxies = {}
-        proxy_url = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
-        if proxy_url:
-            proxies = {'https': proxy_url, 'http': proxy_url}
-        
-        response = requests.post(url, headers=headers, params=params, json=data, timeout=30, proxies=proxies)
-        response.raise_for_status()
-        
-        result = response.json()
-        text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        
-        return self._parse_ai_response(text, tech)
-    
-    def _analyze_with_openai(self, code: str, name: str, tech: Dict[str, Any]) -> Dict[str, Any]:
-        """使用 OpenAI API"""
-        if not HAS_OPENAI or not self.client:
-            return self._default_analysis()
-        
-        prompt = self._build_prompt(code, name, tech)
-        
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        
-        text = response.choices[0].message.content
-        return self._parse_ai_response(text, tech)
-    
+            return self._default_analysis_from_tech(technical_data)
+
     def _build_prompt(self, code: str, name: str, tech: Dict[str, Any]) -> str:
         """构建 AI 提示词（优先从外部 markdown 模板加载）"""
         from pathlib import Path
 
         template_path = Path(__file__).parent / "prompts" / "analysis_prompt.md"
 
-        # 构建变量映射
         variables = {
             'code': code,
             'name': name,
@@ -169,7 +104,6 @@ class AIAnalyzer:
         except FileNotFoundError:
             logger.warning("模板文件 %s 不存在，使用内联 prompt", template_path)
 
-        # 回退：内联 prompt（兼容无模板文件的情况）
         return f"""你是一位专业的股票分析师，请根据以下技术指标给出投资建议。
 
 股票：{name} ({code})
@@ -202,11 +136,10 @@ class AIAnalyzer:
 }}
 
 只输出 JSON，不要其他内容。"""
-    
+
     def _parse_ai_response(self, text: str, tech: Dict[str, Any]) -> Dict[str, Any]:
         """解析 AI 响应"""
         try:
-            # 尝试提取 JSON
             import re
             json_match = re.search(r'\{.*\}', text, re.DOTALL)
             if json_match:
@@ -224,15 +157,14 @@ class AIAnalyzer:
                 }
         except Exception as e:
             logger.warning(f"解析 AI 响应失败：{e}")
-        
-        # 回退到基于技术面的默认分析
+
         return self._default_analysis_from_tech(tech)
-    
+
     def _default_analysis_from_tech(self, tech: Dict[str, Any]) -> Dict[str, Any]:
         """基于技术面的默认分析"""
         score = tech.get('signal_score', 50)
         buy_signal = tech.get('buy_signal', '观望')
-        
+
         return {
             'sentiment_score': score,
             'trend_prediction': tech.get('trend_status', '震荡'),
@@ -241,20 +173,6 @@ class AIAnalyzer:
             'analysis_summary': ' | '.join(tech.get('signal_reasons', []))[:100],
             'buy_reason': ', '.join(tech.get('signal_reasons', [])),
             'risk_warning': ' | '.join(tech.get('risk_factors', [])),
-            'target_price': '',
-            'stop_loss': ''
-        }
-    
-    def _default_analysis(self) -> Dict[str, Any]:
-        """默认分析结果"""
-        return {
-            'sentiment_score': 50,
-            'trend_prediction': '震荡',
-            'operation_advice': '观望',
-            'confidence_level': '低',
-            'analysis_summary': 'AI 分析未启用',
-            'buy_reason': '',
-            'risk_warning': '',
             'target_price': '',
             'stop_loss': ''
         }
