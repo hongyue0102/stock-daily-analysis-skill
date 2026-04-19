@@ -58,14 +58,13 @@
 - 删除 `_analyze_with_gemini()`、`_analyze_with_ollama()`、`_analyze_with_openai()` 三个独立方法
 - 必须配置 AI 才能正常使用，未配置时技术分析结果不完整
 
-### 6. 新增 `generate_report()` 完整报告生成
+### 6. 新增完整报告生成
 
-新增一键生成完整 Markdown 分析报告的函数，解决之前报告格式不统一、可能遗漏行情数据的问题：
+新增 `generate_report()` 内部函数，自动整合行情数据、技术分析和 AI 分析，生成完整的 Markdown 报告：
 
 - **行情数据是必须的** — 获取失败直接返回错误，不会生成残缺报告
-- 调用方只需 `generate_report('600519')` 一行即可获得完整报告
+- Skill 被调用时内部自动调用，无需外部直接调用
 - 报告包含：核心结论、最新行情、技术指标、支撑压力位、近 N 日行情走势表、AI 决策建议
-- 无需调用方自行拼装报告
 
 ## 🚀 快速开始
 
@@ -108,13 +107,9 @@ cp config.example.json config.json
 ### 使用
 
 ```python
-from scripts.analyzer import analyze_stock, analyze_stocks, generate_report
+from scripts.analyzer import analyze_stock, analyze_stocks
 
-# 生成完整的 Markdown 分析报告（推荐）
-report = generate_report('600519')
-print(report)
-
-# 分析单只股票（返回结构化数据）
+# 分析单只股票
 result = analyze_stock('600519')
 print(result['ai_analysis']['operation_advice'])  # 买入/持有/观望
 
