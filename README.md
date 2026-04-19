@@ -138,6 +138,7 @@ stock-daily-analysis-skill/
 ├── config.example.json      # 配置示例
 ├── config.json              # 用户配置 (gitignore)
 ├── requirements.txt         # Python 依赖
+├── 300502_分析报告.md        # 📄 示例报告（新易盛）
 └── scripts/
     ├── analyzer.py          # 主入口
     ├── data_fetcher.py      # 财新数据源获取（stock-market-information skill）
@@ -147,6 +148,8 @@ stock-daily-analysis-skill/
     └── prompts/
         └── analysis_prompt.md  # AI 分析提示词模板
 ```
+
+> 📄 **示例报告**: [300502_分析报告.md](300502_分析报告.md) — 新易盛（300502）完整分析报告，包含技术面分析、AI 决策建议和近 20 日行情走势，供参考报告输出效果。
 
 ## 🔧 配置说明
 
