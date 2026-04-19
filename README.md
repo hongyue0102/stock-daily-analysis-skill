@@ -56,8 +56,7 @@
 - **删除 `provider` 字段**，不再区分 Gemini/Ollama/OpenAI/MLX
 - 只需配置 `api_key` + `base_url` + `model` 即可接入任意 LLM
 - 删除 `_analyze_with_gemini()`、`_analyze_with_ollama()`、`_analyze_with_openai()` 三个独立方法
-- 未配置 AI 时自动降级为纯技术面分析，不会报错
-- 与 `memory-lancedb-pro` 等 skill 保持一致的配置风格
+- 必须配置 AI 才能正常使用，未配置时技术分析结果不完整
 
 ### 6. 新增 `generate_report()` 完整报告生成
 
