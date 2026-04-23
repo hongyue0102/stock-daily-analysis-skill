@@ -100,8 +100,8 @@ workspace/skills/
 ### 配置
 
 ```bash
-cp config.example.json config.json
-# 编辑 config.json 填入你的 API Key
+cp scripts/.env.example scripts/.env
+# 编辑 scripts/.env 填入你的 API Key
 ```
 
 ### 使用
@@ -135,8 +135,6 @@ stock-daily-analysis-skill/
 ├── SKILL.md                 # OpenClaw Skill 定义
 ├── README.md                # 项目文档
 ├── LICENSE                  # MIT 许可证
-├── config.example.json      # 配置示例
-├── config.json              # 用户配置 (gitignore)
 ├── requirements.txt         # Python 依赖
 ├── 300502_分析报告.md        # 📄 示例报告（新易盛）
 └── scripts/
@@ -145,6 +143,8 @@ stock-daily-analysis-skill/
     ├── trend_analyzer.py    # 技术分析引擎
     ├── ai_analyzer.py       # AI 分析模块
     ├── notifier.py          # 报告输出
+    ├── .env.example         # 配置模板
+    ├── .env                 # 用户配置 (gitignore)
     └── prompts/
         └── analysis_prompt.md  # AI 分析提示词模板
 ```
@@ -155,24 +155,20 @@ stock-daily-analysis-skill/
 
 ### AI 模型配置
 
-通过 OpenAI 兼容接口接入任意 LLM，只需配置 `api_key`、`base_url`、`model` 三个字段：
+通过环境变量配置 LLM 接口，编辑 `scripts/.env`：
 
-```json
-{
-  "ai": {
-    "api_key": "sk-your-api-key",
-    "base_url": "https://api.deepseek.com/v1",
-    "model": "deepseek-chat",
-    "temperature": 0.3,
-    "max_tokens": 4096
-  }
-}
+```
+LLM_API_KEY=sk-your-api-key
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+LLM_TEMPERATURE=0.3
+LLM_MAX_TOKENS=4096
 ```
 
-**支持的 base_url 示例：**
+**支持的 LLM_BASE_URL 示例：**
 
-| 提供商 | base_url | 说明 |
-|--------|----------|------|
+| 提供商 | LLM_BASE_URL | 说明 |
+|--------|--------------|------|
 | DeepSeek | `https://api.deepseek.com/v1` | 推荐，国内可用 |
 | OpenAI | `https://api.openai.com/v1` | 需代理 |
 | 智谱 | `https://open.bigmodel.cn/api/paas/v4` | 国内可用 |
