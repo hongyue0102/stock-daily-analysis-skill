@@ -6,12 +6,15 @@
 提供简单的调用接口
 """
 
-import json
 import logging
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 from datetime import datetime
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 # 设置日志
 logging.basicConfig(
@@ -27,21 +30,18 @@ from scripts.ai_analyzer import AIAnalyzer
 from scripts.notifier import AnalysisReport, format_analysis_report, format_dashboard_report
 
 
-def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
-    """加载配置文件"""
-    if config_path is None:
-        skill_dir = Path(__file__).parent.parent
-        config_path = skill_dir / "config.json"
-
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning(f"加载配置文件失败: {e}，使用默认配置")
-        return {
-            "data": {"days": 20, "realtime_enabled": True},
-            "analysis": {"bias_threshold": 5.0}
-        }
+def load_config() -> Dict[str, Any]:
+    """从环境变量加载配置"""
+    return {
+        "data": {
+            "days": int(os.environ.get("DATA_DAYS", "20")),
+        },
+        "analysis": {
+            "bias_threshold": float(os.environ.get("ANALYSIS_BIAS_THRESHOLD", "5.0")),
+            "volume_shrink_ratio": float(os.environ.get("ANALYSIS_VOLUME_SHRINK_RATIO", "0.7")),
+            "volume_heavy_ratio": float(os.environ.get("ANALYSIS_VOLUME_HEAVY_RATIO", "1.5")),
+        },
+    }
 
 
 def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
@@ -91,8 +91,7 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
     trend_result = analyzer.analyze(df, code)
 
     # AI 深度分析
-    ai_config = config.get('ai', {})
-    ai_analyzer = AIAnalyzer(ai_config)
+    ai_analyzer = AIAnalyzer()
     ai_result = ai_analyzer.analyze(code, name, trend_result.to_dict())
 
     # 整合结果
@@ -197,8 +196,7 @@ def generate_report(code: str, config: Optional[Dict] = None) -> str:
     tech = trend_result.to_dict()
 
     # 3. AI 分析
-    ai_config = config.get('ai', {})
-    ai_analyzer = AIAnalyzer(ai_config)
+    ai_analyzer = AIAnalyzer()
     ai_result = ai_analyzer.analyze(code, name, tech)
 
     # 4. 最新行情

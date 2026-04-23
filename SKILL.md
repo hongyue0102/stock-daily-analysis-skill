@@ -32,37 +32,24 @@ results = analyze_stocks(['600362', '601318', '159892'])
 
 1. 复制配置模板：
 ```bash
-cp config.example.json config.json
+cp scripts/.env.example scripts/.env
 ```
 
 2. 填入 AI 配置（支持任意 OpenAI 兼容接口）：
-```json
-{
-  "ai": {
-    "api_key": "sk-your-api-key",
-    "base_url": "https://api.deepseek.com/v1",
-    "model": "deepseek-chat",
-    "temperature": 0.3,
-    "max_tokens": 4096
-  }
-}
+```
+LLM_API_KEY=sk-your-api-key
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+LLM_TEMPERATURE=0.3
+LLM_MAX_TOKENS=4096
 ```
 
-支持的 base_url 示例：
+支持的 LLM_BASE_URL 示例：
 - DeepSeek: `https://api.deepseek.com/v1`
 - OpenAI: `https://api.openai.com/v1`
 - Ollama 本地: `http://localhost:11434/v1`
+- 智谱 GLM: `https://open.bigmodel.cn/api/paas/v4`
 - 其他兼容接口: 填入对应的 base_url 即可
-
-3. (可选) 启用 market-data skill 数据源：
-```json
-{
-  "data": {
-    "use_market_data_skill": true,
-    "market_data_skill_path": "../market-data"
-  }
-}
-```
 
 ## 返回数据
 

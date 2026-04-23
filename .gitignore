@@ -1,5 +1,6 @@
 # 用户配置 (包含 API Key，不要提交到 git)
 config.json
+scripts/.env
 
 # Python
 __pycache__/

@@ -5,7 +5,13 @@ AI 分析模块 - 通过 OpenAI 兼容接口调用 LLM 进行深度分析
 
 import json
 import logging
+import os
 from typing import Dict, Any
+
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(Path(__file__).parent / ".env")
 
 try:
     from openai import OpenAI
@@ -19,18 +25,20 @@ logger = logging.getLogger(__name__)
 class AIAnalyzer:
     """AI 分析器 - 通过 OpenAI 兼容接口调用任意 LLM"""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.model = config.get('model', 'gpt-4o-mini')
-        self.temperature = config.get('temperature', 0.3)
-        self.max_tokens = config.get('max_tokens', 4096)
-        self.enabled = bool(config.get('api_key') or config.get('base_url'))
+    def __init__(self):
+        self.model = os.environ.get("LLM_MODEL", "glm-5.1")
+        self.temperature = float(os.environ.get("LLM_TEMPERATURE", "0.3"))
+        self.max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "4096"))
+        api_key = os.environ.get("LLM_API_KEY", "")
+        base_url = os.environ.get("LLM_BASE_URL", "")
+        self.enabled = bool(api_key or base_url)
 
         if self.enabled and HAS_OPENAI:
             kwargs = {}
-            if config.get('api_key'):
-                kwargs['api_key'] = config['api_key']
-            if config.get('base_url'):
-                kwargs['base_url'] = config['base_url']
+            if api_key:
+                kwargs['api_key'] = api_key
+            if base_url:
+                kwargs['base_url'] = base_url
             self.client = OpenAI(**kwargs)
         else:
             self.client = None
