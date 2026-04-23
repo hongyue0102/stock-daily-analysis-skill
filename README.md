@@ -227,6 +227,36 @@ export SKI_STOCK_MARKET_INFO_PATH=/path/to/stock-market-information
 - [ ] WebUI 管理界面
 - [ ] 支持更多推送渠道
 
+## 📋 变更履历
+
+| 日期 | 版本 | 说明 |
+|------|------|------|
+| 2026-04-23 | v1.2 | 配置方式从 `config.json` 迁移到 `.env` + `python-dotenv`，删除旧配置文件 |
+| 2026-04-19 | v1.1 | 新增 `generate_report()` 完整报告生成，AI 分析提示词外置为 Markdown 模板 |
+| 2026-04-15 | v1.0 | 初始 fork 版本：适配 20 天短周期、精简数据源、统一 OpenAI 兼容接口 |
+
+### v1.2 (2026-04-23) 详细变更
+
+- **配置迁移**：`config.json` → `scripts/.env`，使用 `python-dotenv` 加载环境变量
+- **新增文件**：`scripts/.env.example`（配置模板）、`scripts/.env`（用户配置，gitignore）
+- **删除文件**：`config.json`、`config.example.json`
+- **修改文件**：
+  - `scripts/analyzer.py`：`load_config()` 改为从 `os.environ` 读取
+  - `scripts/ai_analyzer.py`：`AIAnalyzer()` 无参初始化，纯从 env 读取 API 配置
+- **环境变量映射**：
+
+| 环境变量 | 原 config.json 路径 | 默认值 |
+|----------|---------------------|--------|
+| `LLM_API_KEY` | `ai.api_key` | 无 |
+| `LLM_BASE_URL` | `ai.base_url` | 无 |
+| `LLM_MODEL` | `ai.model` | `glm-5.1` |
+| `LLM_TEMPERATURE` | `ai.temperature` | `0.3` |
+| `LLM_MAX_TOKENS` | `ai.max_tokens` | `4096` |
+| `DATA_DAYS` | `data.days` | `20` |
+| `ANALYSIS_BIAS_THRESHOLD` | `analysis.bias_threshold` | `5.0` |
+| `ANALYSIS_VOLUME_SHRINK_RATIO` | `analysis.volume_shrink_ratio` | `0.7` |
+| `ANALYSIS_VOLUME_HEAVY_RATIO` | `analysis.volume_heavy_ratio` | `1.5` |
+
 ## 🤝 贡献指南
 
 欢迎提交 Issue 和 PR！
