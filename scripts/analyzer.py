@@ -8,19 +8,9 @@
 
 import logging
 import os
-from typing import List, Dict, Any, Optional, Tuple
-from pathlib import Path
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).parent / ".env")
-
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 # 导入模块
@@ -90,7 +80,7 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
     analyzer = StockTrendAnalyzer()
     trend_result = analyzer.analyze(df, code)
 
-    # AI 深度分析
+    # 整理技术指标 + 生成供外层 Agent LLM 使用的 prompt
     ai_analyzer = AIAnalyzer()
     ai_result = ai_analyzer.analyze(code, name, trend_result.to_dict())
 
@@ -102,7 +92,7 @@ def analyze_stock(code: str, config: Optional[Dict] = None) -> Dict[str, Any]:
         'ai_analysis': ai_result
     }
 
-    logger.info(f"{code} 分析完成，评分: {ai_result.get('sentiment_score', trend_result.signal_score)}")
+    logger.info(f"{code} 分析完成，技术面评分: {ai_result.get('sentiment_score', trend_result.signal_score)}")
     return result
 
 
@@ -195,14 +185,13 @@ def generate_report(code: str, config: Optional[Dict] = None) -> str:
     trend_result = trend_analyzer.analyze(df, code)
     tech = trend_result.to_dict()
 
-    # 3. AI 分析
+    # 3. 整理技术面结果
     ai_analyzer = AIAnalyzer()
     ai_result = ai_analyzer.analyze(code, name, tech)
 
     # 4. 最新行情
     latest = df.iloc[-1]
     report_date = str(latest['date'])[:10]
-    report_date_short = report_date[5:].replace('-', '')
 
     # 5. 支撑压力位
     support_levels = []
@@ -372,32 +361,6 @@ def generate_report(code: str, config: Optional[Dict] = None) -> str:
     lines.append("---")
     lines.append("")
 
-    # AI 决策建议
-    lines.append("## AI 决策建议")
-    lines.append("")
-    lines.append("| 项目 | 内容 |")
-    lines.append("|------|------|")
-    lines.append(f"| **目标价** | {ai_result.get('target_price', 'N/A')} |")
-    lines.append(f"| **止损价** | {ai_result.get('stop_loss', 'N/A')} |")
-    lines.append(f"| **操作建议** | {ai_result.get('operation_advice', 'N/A')} |")
-
-    # 关键观察点
-    observations = []
-    if tech.get('ma5'):
-        observations.append(f"MA5({_fmt_num(tech['ma5'])})支撑是否有效")
-    macd_status = tech.get('macd_status', '')
-    if '死叉' in macd_status:
-        observations.append("MACD死叉后DIF能否重新上穿DEA")
-    elif '金叉' in macd_status:
-        observations.append("MACD金叉后柱状线能否持续放大")
-    if tech.get('ma10'):
-        observations.append(f"量能能否配合突破MA10({_fmt_num(tech['ma10'])})压力")
-    if observations:
-        lines.append(f"| **关键观察点** | {'；'.join(observations)} |")
-
-    lines.append("")
-    lines.append("---")
-    lines.append("")
     lines.append("*免责声明: 本报告由 stock-daily-analysis-skill 自动生成，基于公开市场数据和技术面分析，仅供学习研究参考，不构成任何投资建议。股市有风险，投资需谨慎。*")
 
     return "\n".join(lines)
