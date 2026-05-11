@@ -41,12 +41,12 @@ class VolumeStatus(Enum):
 
 class BuySignal(Enum):
     """买入信号枚举"""
-    STRONG_BUY = "强烈买入"
-    BUY = "买入"
-    HOLD = "持有"
+    STRONG_BUY = "强烈看多"
+    BUY = "看多"
+    HOLD = "继续跟踪"
     WAIT = "观望"
-    SELL = "卖出"
-    STRONG_SELL = "强烈卖出"
+    SELL = "看空"
+    STRONG_SELL = "强烈看空"
 
 
 class MACDStatus(Enum):
@@ -63,7 +63,7 @@ class MACDStatus(Enum):
 class RSIStatus(Enum):
     """RSI状态枚举"""
     OVERBOUGHT = "超买"
-    STRONG_BUY = "强势买入"
+    STRONG_BUY = "强势看多"
     NEUTRAL = "中性"
     WEAK = "弱势"
     OVERSOLD = "超卖"
@@ -431,7 +431,7 @@ class StockTrendAnalyzer:
         
         if is_golden_cross and result.macd_dif > 0:
             result.macd_status = MACDStatus.GOLDEN_CROSS_ZERO
-            result.macd_signal = "⭐ 零轴上金叉，强烈买入信号！"
+            result.macd_signal = "⭐ 零轴上金叉，强烈看多信号！"
         elif is_crossing_up:
             result.macd_status = MACDStatus.CROSSING_UP
             result.macd_signal = "⚡ DIF上穿零轴，趋势转强"

@@ -221,7 +221,7 @@ def generate_report(code: str, config: Optional[Dict] = None) -> str:
     lines.append("")
     lines.append("| 项目 | 结果 |")
     lines.append("|------|------|")
-    lines.append(f"| **操作建议** | {ai_result.get('operation_advice', 'N/A')} |")
+    lines.append(f"| **AI结论** | {ai_result.get('operation_advice', 'N/A')} |")
     lines.append(f"| **综合评分** | {ai_result.get('sentiment_score', 0)}/100 |")
     lines.append(f"| **趋势判断** | {ai_result.get('trend_prediction', 'N/A')} |")
     lines.append(f"| **置信度** | {ai_result.get('confidence_level', 'N/A')} |")
@@ -318,10 +318,10 @@ def generate_report(code: str, config: Optional[Dict] = None) -> str:
     lines.append("---")
     lines.append("")
 
-    # 买入理由
+    # 看多理由
     buy_reason = ai_result.get('buy_reason', '')
     if buy_reason:
-        lines.append("## 买入理由")
+        lines.append("## 看多理由")
         lines.append("")
         lines.append(f"- {buy_reason}")
         lines.append("")

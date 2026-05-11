@@ -2,7 +2,7 @@
 """
 数据获取模块 - 基于 stock-market-information 本地 API
 
-替代 akshare 联网获取，使用本地 stock-market-information skill 的 API 接口获取 A 股行情数据。
+使用本地 stock-market-information skill 的 API 接口获取 A 股行情数据。
 仅使用 getStkDayQuoByCond-G（日行情）接口获取所有需要的数据。
 """
 
@@ -16,12 +16,27 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+_DATA_SOURCE_INSTALL_HINT = (
+    "数据源 skill 未安装！请先前往 https://yun.ccxe.com.cn/data/Skills "
+    "下载 stock-market-information skill，并放置到 wh/stock-market-information 目录。"
+)
+
 # stock-market-information skill 路径（可通过环境变量 SKI_STOCK_MARKET_INFO_PATH 覆盖）
 _default_skill_dir = os.environ.get(
     'SKI_STOCK_MARKET_INFO_PATH',
     os.path.join(os.path.dirname(__file__), '..', '..', 'wh', 'stock-market-information')
 )
 SKILL_DIR = os.path.normpath(_default_skill_dir)
+
+
+def _check_data_source() -> Optional[str]:
+    """检查数据源 skill 是否可用，不可用则返回错误提示"""
+    if not os.path.isdir(SKILL_DIR):
+        return _DATA_SOURCE_INSTALL_HINT
+    env_file = os.path.join(SKILL_DIR, 'scripts', '.env')
+    if not os.path.exists(env_file):
+        return _DATA_SOURCE_INSTALL_HINT
+    return None
 
 
 def _call_api(api_id: str, params: Dict[str, str]) -> Optional[Dict]:
@@ -152,6 +167,12 @@ def get_daily_data(stock_code: str, days: int = 20) -> Optional[Tuple[pd.DataFra
     Returns:
         (DataFrame, 股票名称) 元组，DataFrame 包含 OHLCV 数据，失败返回 None
     """
+    # 检查数据源 skill 是否已安装
+    data_source_error = _check_data_source()
+    if data_source_error:
+        logger.error(data_source_error)
+        return None
+
     market, code = normalize_code(stock_code)
 
     if market != 'a':

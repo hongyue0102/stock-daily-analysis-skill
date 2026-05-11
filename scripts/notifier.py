@@ -51,7 +51,7 @@ def format_analysis_report(report: AnalysisReport) -> str:
         f"{'='*50}",
         "",
         f"【核心结论】",
-        f"  操作建议: {report.operation_advice}",
+        f"  AI结论: {report.operation_advice}",
         f"  趋势预测: {report.trend_prediction}",
         f"  情绪评分: {report.sentiment_score}/100",
         f"  置信度: {report.confidence_level}",
@@ -98,9 +98,9 @@ def format_analysis_report(report: AnalysisReport) -> str:
             lines.append(f"  - {level:.2f}")
         lines.append("")
     
-    # 买入理由
+    # 看多理由
     if report.buy_reason:
-        lines.append(f"【买入理由】")
+        lines.append(f"【看多理由】")
         lines.append(f"  {report.buy_reason}")
         lines.append("")
     
@@ -145,7 +145,7 @@ def format_dashboard_report(reports: List[AnalysisReport]) -> str:
         f"{'='*60}",
         "",
         f"分析股票数: {len(reports)} 只",
-        f"🟢 买入: {buy_count}  🟡 观望: {hold_count}  🔴 卖出: {sell_count}",
+        f"🟢 看多: {buy_count}  🟡 观望: {hold_count}  🔴 看空: {sell_count}",
         "",
         f"{'='*60}",
     ]
@@ -153,7 +153,7 @@ def format_dashboard_report(reports: List[AnalysisReport]) -> str:
     for report in reports:
         emoji = "🟢" if report.decision_type == 'buy' else "🟡" if report.decision_type == 'hold' else "🔴"
         lines.append(f"{emoji} {report.name} ({report.code})")
-        lines.append(f"   建议: {report.operation_advice} | 评分: {report.sentiment_score}/100")
+        lines.append(f"   结论: {report.operation_advice} | 评分: {report.sentiment_score}/100")
         lines.append(f"   趋势: {report.trend_prediction}")
         
         # 添加关键技术指标
@@ -190,9 +190,9 @@ def create_report_from_result(result: Dict[str, Any]) -> AnalysisReport:
     
     # 确定决策类型
     advice = ai_result.get('operation_advice', '观望')
-    if advice in ['买入', '加仓', '强烈买入']:
+    if advice in ['看多', '加仓', '强烈看多']:
         decision_type = 'buy'
-    elif advice in ['卖出', '减仓', '强烈卖出']:
+    elif advice in ['看空', '减仓', '强烈看空']:
         decision_type = 'sell'
     else:
         decision_type = 'hold'

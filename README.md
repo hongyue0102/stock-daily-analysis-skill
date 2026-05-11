@@ -30,7 +30,7 @@
 
 ### 2. 数据源切换：财新数据平台
 
-原项目使用 `akshare` 获取行情数据，本项目改用 [财新数据平台](https://yun.ccxe.com.cn/) 的 **stock-market-information skill** 作为数据源：
+使用 [财新数据平台](https://yun.ccxe.com.cn/) 的 **stock-market-information skill** 作为数据源：
 
 - 通过财新数据 API 获取 A 股日行情数据（仅使用 getStkDayQuoByCond-G 接口）
 - 数据更稳定，接口响应更快
@@ -105,7 +105,7 @@ from scripts.analyzer import analyze_stock, analyze_stocks
 
 # 分析单只股票
 result = analyze_stock('600519')
-print(result['ai_analysis']['operation_advice'])  # 基于技术面的操作建议
+print(result['ai_analysis']['operation_advice'])  # 基于技术面的AI结论
 print(result['ai_analysis']['analysis_prompt'])    # 供 Agent LLM 的分析提示
 
 # 分析多只股票
@@ -118,7 +118,7 @@ results = analyze_stocks(['600519', '601318', '159892'])
 |------|------|------|
 | A股分析 | ✅ | 支持个股、ETF |
 | 技术面分析 | ✅ | MA/MACD/RSI/乖离率 |
-| 买入信号评分 | ✅ | 0-100 综合评分体系 |
+| AI结论评分 | ✅ | 0-100 综合评分体系 |
 | Agent LLM 提示 | ✅ | 输出分析提示供外层 Agent 决策 |
 | 市场数据源集成 | ✅ | [stock-market-information skill](https://yun.ccxe.com.cn/) |
 
@@ -183,8 +183,8 @@ ANALYSIS_VOLUME_HEAVY_RATIO=1.5
         'ma20': 1450.0,
         'bias_ma5': 2.5,
         'macd_status': '金叉',
-        'rsi_status': '强势买入',
-        'buy_signal': '买入',
+        'rsi_status': '强势看多',
+        'buy_signal': '看多',
         'signal_score': 75,
         'signal_reasons': [...],
         'risk_factors': [...]
@@ -192,7 +192,7 @@ ANALYSIS_VOLUME_HEAVY_RATIO=1.5
     'ai_analysis': {
         'sentiment_score': 75,
         'trend_prediction': '强势多头',
-        'operation_advice': '买入',
+        'operation_advice': '看多',
         'confidence_level': '高',
         'analysis_summary': '多头排列 | MACD金叉 | 量能配合',
         'analysis_prompt': '...'  # 供外层 Agent LLM 参考的完整分析提示
