@@ -146,7 +146,7 @@ stock-daily-analysis-skill/
 ├── README.md                # 项目文档
 ├── LICENSE                  # MIT 许可证
 ├── requirements.txt         # Python 依赖
-├── 300438_分析报告.md        # 📄 示例报告（鹏辉能源）
+├── 300590_移为通信_分析报告_20260512.md  # 📄 示例报告（移为通信）
 └── scripts/
     ├── analyzer.py          # 主入口
     ├── data_fetcher.py      # 财新数据源获取（stock-market-information skill）
@@ -159,7 +159,7 @@ stock-daily-analysis-skill/
         └── analysis_prompt.md  # 分析提示词模板（供外层 Agent LLM 参考）
 ```
 
-> 📄 **示例报告**: [300438_分析报告.md](300438_分析报告.md) — 鹏辉能源（300438）完整分析报告，包含技术面分析和近 20 日行情走势，供参考报告输出效果。
+> 📄 **示例报告**: [300590_移为通信_分析报告_20260512.md](300590_移为通信_分析报告_20260512.md) — 移为通信（300590）完整分析报告，包含技术面分析和近 20 日行情走势，供参考报告输出效果。
 
 ## 🔧 配置说明
 
