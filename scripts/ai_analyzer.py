@@ -42,5 +42,6 @@ class AIAnalyzer:
             'buy_reason': ', '.join(tech.get('signal_reasons', [])),
             'risk_warning': ' | '.join(tech.get('risk_factors', [])),
             'target_price': '',
-            'stop_loss': ''
+            'stop_loss': '',
+            'price_disclaimer': '若假设不成立，实际价格可能显著偏离。投资者应根据自身风险承受能力独立决策。'
         }
