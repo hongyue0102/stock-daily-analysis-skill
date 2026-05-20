@@ -83,6 +83,17 @@ SKILL.md 的 Step 2 新增明确指令，要求 Agent LLM 必须亲自解读技�
 - 目录或配置文件不存在时，返回明确的下载提示和安装地址
 - 引导用户前往 [财新数据平台](https://yun.ccxe.com.cn/data/Skills) 下载数据源 skill
 
+### 9. 量化增强指标
+
+新增 14 个量化指标，解决 Agent LLM 解读每次不一致的问题：
+
+- **price_phase**：价格阶段（蓄势/发散启动/趋势上行/高位震荡/下跌趋势/盘整）
+- **rsi_overbuy_type + rsi_risk_level**：RSI 超买分类（暴涨型/连续小阳型/温和超买）及风险等级
+- **breakout_signal + near_high_pct**：突破信号（突破前高/接近前高/远离前高）
+- **consecutive_up_days + recent_5d/10d_gain_pct**：连涨天数与累计涨幅
+- **ma_convergence + prev_ma_convergence**：均线收敛度及变化
+- **ma_support_count + ma_support_success_rate**：均线支撑统计
+
 ## 🚀 快速开始
 
 ### 安装
@@ -135,6 +146,7 @@ results = analyze_stocks(['600519', '601318', '159892'])
 | A股分析 | ✅ | 支持个股、ETF |
 | 技术面分析 | ✅ | MA/MACD/RSI/乖离率 |
 | AI结论评分 | ✅ | 0-100 综合评分体系 |
+| 量化增强指标 | ✅ | 14个量化标签，确保AI解读可复现 |
 | Agent LLM 提示 | ✅ | 输出分析提示供外层 Agent 决策 |
 | 市场数据源集成 | ✅ | [stock-market-information skill](https://yun.ccxe.com.cn/) |
 
