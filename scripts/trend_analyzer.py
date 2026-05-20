@@ -121,6 +121,22 @@ class TrendAnalysisResult:
     signal_score: int = 0
     signal_reasons: List[str] = field(default_factory=list)
     risk_factors: List[str] = field(default_factory=list)
+
+    # 量化增强指标
+    consecutive_up_days: int = 0
+    recent_5d_gain_pct: float = 0.0
+    recent_10d_gain_pct: float = 0.0
+    ma_convergence: float = 0.0
+    prev_ma_convergence: float = 0.0
+    price_phase: str = "盘整"
+    rsi_overbuy_type: str = "非超买"
+    rsi_risk_level: str = "无"
+    near_high_pct: float = 0.0
+    breakout_signal: str = "远离前高"
+    prev_high: float = 0.0
+    prev_high_date: str = ""
+    ma_support_count: int = 0
+    ma_support_success_rate: float = 0.0
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -156,6 +172,21 @@ class TrendAnalysisResult:
             'rsi_24': self.rsi_24,
             'rsi_status': self.rsi_status.value,
             'rsi_signal': self.rsi_signal,
+            # 量化增强指标
+            'consecutive_up_days': self.consecutive_up_days,
+            'recent_5d_gain_pct': round(self.recent_5d_gain_pct, 2),
+            'recent_10d_gain_pct': round(self.recent_10d_gain_pct, 2),
+            'ma_convergence': round(self.ma_convergence, 4),
+            'prev_ma_convergence': round(self.prev_ma_convergence, 4),
+            'price_phase': self.price_phase,
+            'rsi_overbuy_type': self.rsi_overbuy_type,
+            'rsi_risk_level': self.rsi_risk_level,
+            'near_high_pct': round(self.near_high_pct, 2),
+            'breakout_signal': self.breakout_signal,
+            'prev_high': self.prev_high,
+            'prev_high_date': self.prev_high_date,
+            'ma_support_count': self.ma_support_count,
+            'ma_support_success_rate': round(self.ma_support_success_rate, 2),
         }
 
 
@@ -227,6 +258,7 @@ class StockTrendAnalyzer:
         self._analyze_macd(df, result)
         self._analyze_rsi(df, result)
         self._generate_signal(result)
+        self._analyze_quantitative_enhancements(df, result)
         
         return result
     
@@ -609,6 +641,118 @@ class StockTrendAnalyzer:
             result.buy_signal = BuySignal.STRONG_SELL
         else:
             result.buy_signal = BuySignal.SELL
+
+    def _analyze_quantitative_enhancements(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """量化增强指标计算"""
+
+        # 1. 连续上涨天数
+        if len(df) >= 2:
+            count = 0
+            for i in range(len(df) - 1, 0, -1):
+                if df.iloc[i]['close'] > df.iloc[i - 1]['close']:
+                    count += 1
+                else:
+                    break
+            result.consecutive_up_days = count
+
+        # 2. 近5日/10日累计涨幅
+        if len(df) >= 6:
+            result.recent_5d_gain_pct = (df.iloc[-1]['close'] - df.iloc[-6]['close']) / df.iloc[-6]['close'] * 100
+        if len(df) >= 11:
+            result.recent_10d_gain_pct = (df.iloc[-1]['close'] - df.iloc[-11]['close']) / df.iloc[-11]['close'] * 100
+
+        # 3. 均线收敛度（MA5/MA10/MA20 的变异系数）
+        def _calc_cv(row):
+            vals = [row['MA5'], row['MA10'], row['MA20']]
+            mean_v = sum(vals) / 3
+            if mean_v <= 0:
+                return 0.0
+            return float(np.std(vals) / mean_v)
+
+        result.ma_convergence = _calc_cv(df.iloc[-1])
+        if len(df) >= 6:
+            result.prev_ma_convergence = _calc_cv(df.iloc[-6])
+
+        # 4. 价格阶段判断
+        if result.trend_status in [TrendStatus.BEAR, TrendStatus.STRONG_BEAR]:
+            result.price_phase = "下跌趋势"
+        elif (result.ma_convergence < 0.02
+              and result.consecutive_up_days <= 3
+              and result.recent_10d_gain_pct < 5):
+            result.price_phase = "蓄势"
+        elif result.prev_ma_convergence < 0.02 and result.ma_convergence >= 0.02:
+            result.price_phase = "发散启动"
+        elif result.trend_status in [TrendStatus.BULL, TrendStatus.STRONG_BULL] and result.ma_convergence >= 0.02:
+            result.price_phase = "趋势上行"
+        else:
+            if len(df) >= 5:
+                high_5d = df['high'].iloc[-5:].max()
+                low_5d = df['low'].iloc[-5:].min()
+                close_start = df['close'].iloc[-5]
+                close_end = df['close'].iloc[-1]
+                volatility = (high_5d - low_5d) / low_5d * 100 if low_5d > 0 else 0
+                close_change = abs(close_end - close_start) / close_start * 100 if close_start > 0 else 0
+                if volatility > 5 and close_change < 2:
+                    result.price_phase = "高位震荡"
+                else:
+                    result.price_phase = "盘整"
+            else:
+                result.price_phase = "盘整"
+
+        # 5. RSI 超买分类
+        if result.rsi_12 <= 70:
+            result.rsi_overbuy_type = "非超买"
+            result.rsi_risk_level = "无"
+        elif result.recent_5d_gain_pct > 8:
+            result.rsi_overbuy_type = "暴涨型"
+            result.rsi_risk_level = "高风险"
+        elif result.consecutive_up_days >= 5 and result.recent_5d_gain_pct > 0:
+            avg_daily = result.recent_5d_gain_pct / result.consecutive_up_days
+            if avg_daily < 1.5:
+                result.rsi_overbuy_type = "连续小阳型"
+                result.rsi_risk_level = "低风险"
+            else:
+                result.rsi_overbuy_type = "温和超买"
+                result.rsi_risk_level = "中风险"
+        else:
+            result.rsi_overbuy_type = "温和超买"
+            result.rsi_risk_level = "中风险"
+
+        # 6. 突破信号
+        if len(df) >= 20:
+            recent = df.iloc[-20:]
+            high_idx = recent['high'].idxmax()
+            result.prev_high = float(recent.loc[high_idx, 'high'])
+            result.prev_high_date = str(recent.loc[high_idx, 'date'])[:10]
+            if result.prev_high > 0:
+                # 正值=当前价低于前高（距前高还有多远），负值=已突破前高
+                result.near_high_pct = (result.prev_high - result.current_price) / result.prev_high * 100
+            if result.near_high_pct <= 0:
+                result.breakout_signal = "突破前高"
+            elif result.near_high_pct <= 3:
+                result.breakout_signal = "接近前高"
+            else:
+                result.breakout_signal = "远离前高"
+
+        # 7. 均线支撑统计
+        if len(df) >= 20:
+            recent = df.iloc[-20:]
+            support_events = 0
+            support_success = 0
+            for i in range(1, len(recent)):
+                close_i = recent.iloc[i]['close']
+                ma5_i = recent.iloc[i]['MA5']
+                ma10_i = recent.iloc[i]['MA10']
+                near_ma5 = ma5_i > 0 and abs(close_i - ma5_i) / ma5_i <= 0.02
+                near_ma10 = ma10_i > 0 and abs(close_i - ma10_i) / ma10_i <= 0.02
+                if near_ma5 or near_ma10:
+                    support_events += 1
+                    if i + 1 < len(recent):
+                        if recent.iloc[i + 1]['close'] > close_i:
+                            support_success += 1
+            result.ma_support_count = support_events
+            if support_events > 0:
+                result.ma_support_success_rate = support_success / support_events
 
 
 def analyze_stock(df: pd.DataFrame, code: str) -> TrendAnalysisResult:
